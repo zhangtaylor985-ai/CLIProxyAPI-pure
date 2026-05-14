@@ -99,15 +99,28 @@ func TestCodexExecutorCacheHelper_OpenAIChatCompletions_UsesMetadataUserIDWhenAv
 	observeCodexPromptCacheUsage(auth, sdktranslator.FromString("openai"), req.Model, req.Payload, 24000, 18432)
 	httpReq1, err := executor.cacheHelper(ctx, auth, sdktranslator.FromString("openai"), url, req, rawJSON)
 	if err != nil {
-		t.Fatalf("cacheHelper rolled error: %v", err)
+		t.Fatalf("cacheHelper first cached error: %v", err)
 	}
 	body1, err := io.ReadAll(httpReq1.Body)
 	if err != nil {
+		t.Fatalf("read first cached body: %v", err)
+	}
+	if keyFirstCached := gjson.GetBytes(body1, "prompt_cache_key").String(); keyFirstCached != key0 {
+		t.Fatalf("metadata-backed OpenAI cache key changed after first cached baseline: got %q want %q", keyFirstCached, key0)
+	}
+
+	observeCodexPromptCacheUsage(auth, sdktranslator.FromString("openai"), req.Model, req.Payload, 24000, 38912)
+	httpReqRolled, err := executor.cacheHelper(ctx, auth, sdktranslator.FromString("openai"), url, req, rawJSON)
+	if err != nil {
+		t.Fatalf("cacheHelper rolled error: %v", err)
+	}
+	bodyRolled, err := io.ReadAll(httpReqRolled.Body)
+	if err != nil {
 		t.Fatalf("read rolled body: %v", err)
 	}
-	key1 := gjson.GetBytes(body1, "prompt_cache_key").String()
+	key1 := gjson.GetBytes(bodyRolled, "prompt_cache_key").String()
 	if key1 == "" || key1 == key0 {
-		t.Fatalf("expected metadata-backed OpenAI cache key to roll, key0=%q key1=%q", key0, key1)
+		t.Fatalf("expected metadata-backed OpenAI cache key to roll after cached prefix grew, key0=%q key1=%q", key0, key1)
 	}
 }
 
@@ -288,15 +301,14 @@ func TestCodexExecutorCacheHelper_ClaudePromptCacheRollsAfterCachedGrowth(t *tes
 	observeCodexPromptCacheUsage(auth, sdktranslator.FromString("claude"), req.Model, req.Payload, 15808, 18432)
 	httpReq1, err := executor.cacheHelper(context.Background(), auth, sdktranslator.FromString("claude"), url, req, rawJSON)
 	if err != nil {
-		t.Fatalf("cacheHelper rolled error: %v", err)
+		t.Fatalf("cacheHelper first cached error: %v", err)
 	}
 	body1, err := io.ReadAll(httpReq1.Body)
 	if err != nil {
-		t.Fatalf("read rolled body: %v", err)
+		t.Fatalf("read first cached body: %v", err)
 	}
-	key1 := gjson.GetBytes(body1, "prompt_cache_key").String()
-	if key1 == "" || key1 == key0 {
-		t.Fatalf("expected rolling cache key to advance, key0=%q key1=%q", key0, key1)
+	if keyFirstCached := gjson.GetBytes(body1, "prompt_cache_key").String(); keyFirstCached != key0 {
+		t.Fatalf("cache key changed after first cached baseline: got %q want %q", keyFirstCached, key0)
 	}
 
 	observeCodexPromptCacheUsage(auth, sdktranslator.FromString("claude"), req.Model, req.Payload, 20000, 18432)
@@ -308,7 +320,21 @@ func TestCodexExecutorCacheHelper_ClaudePromptCacheRollsAfterCachedGrowth(t *tes
 	if err != nil {
 		t.Fatalf("read below-step body: %v", err)
 	}
-	if keyBelowStep := gjson.GetBytes(bodyBelowStep, "prompt_cache_key").String(); keyBelowStep != key1 {
-		t.Fatalf("cache key changed below rolling step: got %q want %q", keyBelowStep, key1)
+	if keyBelowStep := gjson.GetBytes(bodyBelowStep, "prompt_cache_key").String(); keyBelowStep != key0 {
+		t.Fatalf("cache key changed while cached prefix was stuck: got %q want %q", keyBelowStep, key0)
+	}
+
+	observeCodexPromptCacheUsage(auth, sdktranslator.FromString("claude"), req.Model, req.Payload, 20000, 38912)
+	httpReqRolled, err := executor.cacheHelper(context.Background(), auth, sdktranslator.FromString("claude"), url, req, rawJSON)
+	if err != nil {
+		t.Fatalf("cacheHelper rolled error: %v", err)
+	}
+	bodyRolled, err := io.ReadAll(httpReqRolled.Body)
+	if err != nil {
+		t.Fatalf("read rolled body: %v", err)
+	}
+	key1 := gjson.GetBytes(bodyRolled, "prompt_cache_key").String()
+	if key1 == "" || key1 == key0 {
+		t.Fatalf("expected rolling cache key to advance after cached prefix grew, key0=%q key1=%q", key0, key1)
 	}
 }

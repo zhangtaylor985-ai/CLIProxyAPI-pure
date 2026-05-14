@@ -376,6 +376,12 @@ func TestApplyCodexPromptCacheHeadersRollsClaudePromptCache(t *testing.T) {
 	}
 
 	observeCodexPromptCacheUsage(auth, sdktranslator.FromString("claude"), req.Model, req.Payload, 24000, 18432)
+	bodyBaseline, _ := applyCodexPromptCacheHeaders(auth, endpoint, "claude", req, body)
+	if keyBaseline := gjson.GetBytes(bodyBaseline, "prompt_cache_key").String(); keyBaseline != key0 {
+		t.Fatalf("websocket cache key changed after first cached baseline: got %q want %q", keyBaseline, key0)
+	}
+
+	observeCodexPromptCacheUsage(auth, sdktranslator.FromString("claude"), req.Model, req.Payload, 24000, 38912)
 	body1, headers1 := applyCodexPromptCacheHeaders(auth, endpoint, "claude", req, body)
 	key1 := gjson.GetBytes(body1, "prompt_cache_key").String()
 	if key1 == "" || key1 == key0 {
@@ -399,6 +405,12 @@ func TestApplyCodexPromptCacheHeadersRollsOpenAIMetadataPromptCache(t *testing.T
 	}
 
 	observeCodexPromptCacheUsage(auth, sdktranslator.FromString("openai"), req.Model, req.Payload, 24000, 18432)
+	bodyBaseline, _ := applyCodexPromptCacheHeaders(auth, endpoint, "openai", req, body)
+	if keyBaseline := gjson.GetBytes(bodyBaseline, "prompt_cache_key").String(); keyBaseline != key0 {
+		t.Fatalf("OpenAI websocket cache key changed after first cached baseline: got %q want %q", keyBaseline, key0)
+	}
+
+	observeCodexPromptCacheUsage(auth, sdktranslator.FromString("openai"), req.Model, req.Payload, 24000, 38912)
 	body1, headers1 := applyCodexPromptCacheHeaders(auth, endpoint, "openai", req, body)
 	key1 := gjson.GetBytes(body1, "prompt_cache_key").String()
 	if key1 == "" || key1 == key0 {

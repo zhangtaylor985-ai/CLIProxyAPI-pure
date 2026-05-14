@@ -19,6 +19,7 @@ type CodexCache struct {
 	Expire               time.Time
 	Generation           int
 	LastRollPromptTokens int64
+	LastRollCachedTokens int64
 }
 
 // codexCacheMap stores prompt cache IDs keyed by model+user_id.
@@ -119,7 +120,14 @@ func ObserveCodexRollingCacheUsage(scope string, inputTokens, cachedTokens int64
 	if !ok || cache.Expire.Before(now) || strings.TrimSpace(cache.ID) == "" {
 		cache = newCodexRollingCache(scope, 0, 0, now)
 	}
-	if promptTokens-cache.LastRollPromptTokens < codexRollingCacheStepTokens {
+	if cache.LastRollCachedTokens == 0 {
+		cache.LastRollCachedTokens = cachedTokens
+		cache.LastRollPromptTokens = promptTokens
+		cache.Expire = now.Add(codexPromptCacheTTL)
+		codexCacheMap[scope] = cache
+		return
+	}
+	if cachedTokens-cache.LastRollCachedTokens < codexRollingCacheStepTokens {
 		cache.Expire = now.Add(codexPromptCacheTTL)
 		codexCacheMap[scope] = cache
 		return
@@ -128,6 +136,7 @@ func ObserveCodexRollingCacheUsage(scope string, inputTokens, cachedTokens int64
 	cache.Generation++
 	cache.ID = codexRollingCacheID(scope, cache.Generation)
 	cache.LastRollPromptTokens = promptTokens
+	cache.LastRollCachedTokens = cachedTokens
 	cache.Expire = now.Add(codexPromptCacheTTL)
 	codexCacheMap[scope] = cache
 }
@@ -138,6 +147,7 @@ func newCodexRollingCache(scope string, generation int, promptTokens int64, now 
 		Expire:               now.Add(codexPromptCacheTTL),
 		Generation:           generation,
 		LastRollPromptTokens: promptTokens,
+		LastRollCachedTokens: 0,
 	}
 }
 
